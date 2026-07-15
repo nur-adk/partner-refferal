@@ -113,6 +113,14 @@ export const INDUSTRY_KEYWORDS: Record<string, string[]> = {
   "Professional Services": ["consulting", "agency", "advisory", "professional services"],
 };
 
+// Company-size buckets → Apollo `organization_num_employees_ranges` ("min,max").
+export const COMPANY_SIZES = [
+  { label: "Micro (1–9)", range: "1,9" },
+  { label: "Small (10–49)", range: "10,49" },
+  { label: "Medium (50–249)", range: "50,249" },
+  { label: "Large (250+)", range: "250,1000000" },
+] as const;
+
 // Decision-maker role buckets. `keywords` classify a lead's free-text title into
 // a bucket for the leads filter; `searchTitles` feed Apollo's person_titles.
 export const TITLE_CATEGORIES: { label: string; keywords: string[]; searchTitles: string[] }[] = [

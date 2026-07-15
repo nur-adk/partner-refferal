@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateLeads, generateSimilarLeads, type GenerateResult } from "@/app/leads/actions";
 import {
@@ -9,6 +9,7 @@ import {
   COUNTRY_CONFIG,
   INDUSTRIES,
   TITLE_CATEGORIES,
+  COMPANY_SIZES,
   type LeadCountry,
 } from "@/lib/constants";
 
@@ -29,12 +30,24 @@ export default function GeneratePanel() {
   const [country, setCountry] = useState<LeadCountry>(ENABLED_SEARCH_COUNTRIES[0] ?? "US");
   const [roles, setRoles] = useState<string[]>([]);
   const [industry, setIndustry] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [sizes, setSizes] = useState<string[]>([]);
+  const [count, setCount] = useState(3);
+  const [status, setStatus] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Search page cursor — advances each Generate so we keep pulling new people.
+  const [page, setPage] = useState(1);
+  // Reset to page 1 whenever the search criteria change.
+  useEffect(() => {
+    setPage(1);
+  }, [country, roles, industry, keyword, sizes, count]);
 
   function toggleRole(label: string) {
     setRoles((prev) => (prev.includes(label) ? prev.filter((r) => r !== label) : [...prev, label]));
   }
-  const [count, setCount] = useState(3);
-  const [status, setStatus] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  function toggleSize(range: string) {
+    setSizes((prev) => (prev.includes(range) ? prev.filter((s) => s !== range) : [...prev, range]));
+  }
 
   // "Similar To" state
   const [seedUrl, setSeedUrl] = useState("");
@@ -49,9 +62,25 @@ export default function GeneratePanel() {
         count,
         roles: roles.length ? roles : undefined,
         industry: industry || undefined,
+        keywords: keyword.trim() || undefined,
+        companySizes: sizes.length ? sizes : undefined,
+        page,
       });
-      setStatus({ kind: r.ok ? "ok" : "err", text: resultMessage(r, "Generate") });
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        // Advance to the next page for the following click, so repeated Generates
+        // walk deeper into the results instead of re-fetching the same people.
+        if (r.pageHadResults) setPage((r.page ?? page) + 1);
+        const base = resultMessage(r, `Generate (page ${r.page ?? page})`);
+        const text = !r.pageHadResults
+          ? "No more results for these filters — adjust them to search again."
+          : r.created === 0
+            ? `${base}. All were already in your list — click Generate again for the next page.`
+            : base;
+        setStatus({ kind: "ok", text });
+        router.refresh();
+      } else {
+        setStatus({ kind: "err", text: resultMessage(r, "Generate") });
+      }
     });
   }
 
@@ -151,6 +180,58 @@ export default function GeneratePanel() {
           </select>
         </div>
 
+        <div className="relative">
+          <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">Company size</label>
+          <details className="group mt-1">
+            <summary className="flex w-44 cursor-pointer list-none items-center justify-between rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700">
+              <span className="truncate">
+                {sizes.length === 0
+                  ? "Any size"
+                  : sizes.length === 1
+                    ? COMPANY_SIZES.find((s) => s.range === sizes[0])?.label
+                    : `${sizes.length} sizes`}
+              </span>
+              <span className="ml-2 text-gray-400 group-open:rotate-180">▾</span>
+            </summary>
+            <div className="absolute z-10 mt-1 w-48 rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+              {sizes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSizes([])}
+                  className="mb-1 w-full rounded px-2 py-1 text-left text-xs text-blue-600 hover:bg-gray-50"
+                >
+                  Clear ({sizes.length})
+                </button>
+              )}
+              {COMPANY_SIZES.map((s) => (
+                <label
+                  key={s.range}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={sizes.includes(s.range)}
+                    onChange={() => toggleSize(s.range)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">Keyword</label>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="e.g. SaaS, B2B, AI"
+            className="mt-1 w-40 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          />
+        </div>
+
         <div>
           <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">How many</label>
           <input
@@ -169,12 +250,24 @@ export default function GeneratePanel() {
           disabled={isPending}
           className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
         >
-          {isPending ? "Working…" : "Generate"}
+          {isPending ? "Working…" : page > 1 ? `Generate — page ${page}` : "Generate"}
         </button>
 
+        {page > 1 && (
+          <button
+            type="button"
+            onClick={() => setPage(1)}
+            disabled={isPending}
+            className="rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            title="Start over from page 1"
+          >
+            ↺ Page 1
+          </button>
+        )}
+
         <p className="max-w-xs text-xs text-gray-400">
-          Searches Apollo by region, role &amp; industry. Industry is a keyword match
-          (approximate). Enriching uses ~1 Apollo credit per lead.
+          Region, role, industry, size &amp; keyword filter Apollo. Each Generate pulls the
+          next page, skipping people already in your list. ~1 credit per new lead.
         </p>
       </div>
 

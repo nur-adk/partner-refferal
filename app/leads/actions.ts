@@ -259,6 +259,8 @@ export type GenerateResult = {
   enriched?: number; // how many we spent credits enriching
   created?: number; // new leads inserted
   duplicates?: number; // skipped because already in the DB
+  page?: number; // search page this run used
+  pageHadResults?: boolean; // false when the page returned nothing (end of results)
 };
 
 // Persist a batch of enriched Apollo people as tool-generated leads, skipping
@@ -333,18 +335,25 @@ export async function generateLeads(input: {
   count: number;
   roles?: string[]; // TITLE_CATEGORIES labels; narrows person_titles (union)
   industry?: string; // an INDUSTRIES label; narrows via keyword + tags results
+  keywords?: string; // free-text keyword search (combined with industry)
+  companySizes?: string[]; // Apollo "min,max" employee ranges (COMPANY_SIZES)
+  page?: number; // search page — advance to keep finding new people
 }): Promise<GenerateResult> {
   if (!ENABLED_SEARCH_COUNTRIES.includes(input.country)) {
     return { ok: false, error: `Search isn't enabled for ${input.country} yet.` };
   }
 
   const count = Math.min(Math.max(1, Math.floor(input.count)), MAX_ENRICH);
+  const page = Math.max(1, Math.floor(input.page ?? 1));
 
   // Narrow titles to the union of the picked role buckets, else the full ICP set.
   const picked = input.roles?.length
     ? TITLE_CATEGORIES.filter((c) => input.roles!.includes(c.label))
     : [];
   const titles = picked.length ? [...new Set(picked.flatMap((c) => c.searchTitles))] : undefined;
+
+  // q_keywords is a single field, so combine the keyword box + industry.
+  const keywords = [input.keywords?.trim(), input.industry].filter(Boolean).join(" ") || undefined;
 
   try {
     // Only the latest run is "new" — clear the flag from any prior batch first.
@@ -353,13 +362,26 @@ export async function generateLeads(input: {
     const { people, totalEntries } = await searchPeople({
       country: input.country,
       titles,
-      keywords: input.industry || undefined,
-      page: 1,
+      keywords,
+      employeeRanges: input.companySizes,
+      page,
       perPage: count,
     });
 
+    // Skip people already in the DB *before* enriching, so credits are only
+    // spent on genuinely new leads (enrichment is the paid Apollo call).
+    const existing = new Set(
+      (
+        await prisma.lead.findMany({
+          where: { apolloId: { in: people.map((p) => p.id) } },
+          select: { apolloId: true },
+        })
+      ).map((l) => l.apolloId),
+    );
+    const fresh = people.filter((p) => !existing.has(p.id)).slice(0, count);
+
     const enriched: ApolloLeadData[] = [];
-    for (const person of people.slice(0, count)) {
+    for (const person of fresh) {
       const full = await enrichById(person.id);
       if (full) enriched.push(enrichedToLeadData(full));
     }
@@ -375,6 +397,8 @@ export async function generateLeads(input: {
       enriched: enriched.length,
       created,
       duplicates,
+      page,
+      pageHadResults: people.length > 0,
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Search failed." };

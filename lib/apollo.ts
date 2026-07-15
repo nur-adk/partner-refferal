@@ -101,6 +101,8 @@ export type SearchParams = {
   // person/company profile — an approximate industry narrowing, not an exact
   // taxonomy filter.
   keywords?: string;
+  // Apollo company-size ranges as "min,max" strings (see COMPANY_SIZES).
+  employeeRanges?: string[];
   page?: number;
   perPage?: number;
 };
@@ -110,6 +112,7 @@ export async function searchPeople({
   seniorities = DEFAULT_SENIORITIES,
   country,
   keywords,
+  employeeRanges,
   page = 1,
   perPage = 25,
 }: SearchParams): Promise<{ people: ApolloSearchPerson[]; totalEntries: number }> {
@@ -119,6 +122,7 @@ export async function searchPeople({
     person_seniorities: seniorities,
     person_locations: [COUNTRY_CONFIG[country].apolloLocation],
     ...(keywords ? { q_keywords: keywords } : {}),
+    ...(employeeRanges?.length ? { organization_num_employees_ranges: employeeRanges } : {}),
     page,
     per_page: perPage,
   });
