@@ -305,8 +305,9 @@ async function persistLeads(
         university,
         isNew: true,
         // Tag with the searched industry if the user picked one; otherwise fall
-        // back to a best-effort guess from the lead's own text.
-        industry: extra.industry ?? lead.industry ?? guessIndustry([lead.title, lead.summary].filter(Boolean).join(" ")),
+        // back to a best-effort guess from the lead's own text. (Company
+        // enrichment below refines this right after creation.)
+        industry: extra.industry ?? guessIndustry([lead.title, lead.summary].filter(Boolean).join(" ")),
         source: "tool_generated",
         similarToLinkedinUrl: extra.similarToLinkedinUrl ?? null,
       },

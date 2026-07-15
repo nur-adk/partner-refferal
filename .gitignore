@@ -47,3 +47,6 @@ next-env.d.ts
 /dev.db
 *.db
 *.db-journal
+
+# but do commit the template
+!.env.example

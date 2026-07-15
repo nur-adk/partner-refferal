@@ -169,11 +169,12 @@ browse/edit the `Lead` and `DecisionMaker` tables directly.
 - [Prisma](https://www.prisma.io) ORM + SQLite (via `@prisma/adapter-better-sqlite3`)
 - [PapaParse](https://www.papaparse.com) for CSV parsing
 
-## Deploying later
+## Deploying to Vercel
 
-The app is a standard Next.js project and can be deployed to Vercel.
-**Note:** SQLite files don't persist on Vercel's serverless filesystem, so
-before deploying you'll want to swap the Prisma datasource/adapter for a
-hosted database (e.g. Postgres via Vercel Postgres/Neon, or Turso for
-SQLite-compatible hosting) — the Prisma schema and app code won't need to
-change beyond the datasource configuration.
+Ready to deploy. The app uses the **libSQL adapter**, which serves a local
+`dev.db` file in development and a hosted **Turso** (SQLite-compatible) database
+in production — selected purely by environment variables, so local dev is
+unchanged. See **[DEPLOY.md](DEPLOY.md)** for the step-by-step: create a free
+Turso DB, run `npm run db:push-turso` to copy your data up, import the repo into
+Vercel, and set `APOLLO_API_KEY` / `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`.
+The build script runs `prisma generate` automatically.
