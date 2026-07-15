@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { INDUSTRIES, TITLE_CATEGORIES, categorizeTitle } from "@/lib/constants";
 import { setLeadRating, toggleLeadFavorite, deleteLead } from "@/app/leads/actions";
+
+const PAGE_SIZE = 10; // leads per page
 
 export type LeadRow = {
   id: string;
@@ -76,6 +78,21 @@ export default function LeadsTable({ leads }: { leads: LeadRow[] }) {
     return sorted;
   }, [leads, query, industry, titleCategory, favoritesOnly, sortKey, sortDirection]);
 
+  // Pagination — split the filtered/sorted list into pages of PAGE_SIZE. Newest
+  // leads sit at the top (default sort is createdAt desc).
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1); // any change to the result set jumps back to page 1
+  }, [query, industry, titleCategory, favoritesOnly, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filteredAndSorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // When actively searching, a match that's an already-seen lead (not from the
+  // latest generate) gets a yellow "seen — potential match" flag.
+  const searching = query.trim().length > 0;
+
   const selectCls =
     "rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none";
 
@@ -134,22 +151,30 @@ export default function LeadsTable({ leads }: { leads: LeadRow[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredAndSorted.map((lead) => (
+            {pageRows.map((lead) => {
+              const seenMatch = searching && !lead.isNew;
+              return (
               <tr
                 key={lead.id}
                 className={
                   lead.isNew
                     ? "border-l-4 border-green-400 bg-green-50 hover:bg-green-100"
-                    : "hover:bg-gray-50"
+                    : seenMatch
+                      ? "border-l-4 border-yellow-400 bg-yellow-50 hover:bg-yellow-100"
+                      : "hover:bg-gray-50"
                 }
               >
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  <span className="inline-flex items-center gap-1.5">
-                    {lead.isNew && (
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    {lead.isNew ? (
                       <span className="inline-flex items-center rounded-full bg-green-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-900">
                         New
                       </span>
-                    )}
+                    ) : seenMatch ? (
+                      <span className="inline-flex items-center rounded-full bg-yellow-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-yellow-900">
+                        Seen · potential match
+                      </span>
+                    ) : null}
                     {lead.name}
                     {lead.warmConnections > 0 && (
                       <span
@@ -176,7 +201,8 @@ export default function LeadsTable({ leads }: { leads: LeadRow[] }) {
                   </Link>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filteredAndSorted.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
@@ -187,7 +213,96 @@ export default function LeadsTable({ leads }: { leads: LeadRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+      )}
     </div>
+  );
+}
+
+// Numbered page controls (1 2 3 …) with Prev/Next, windowed so long lists stay tidy.
+function Pagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (p: number) => void;
+}) {
+  // Show up to a window of pages around the current one.
+  const WINDOW = 7;
+  let start = Math.max(1, page - Math.floor(WINDOW / 2));
+  const end = Math.min(totalPages, start + WINDOW - 1);
+  start = Math.max(1, end - WINDOW + 1);
+  const nums = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+
+  const cell = "min-w-[2rem] rounded-md border px-2 py-1 text-sm font-medium";
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        className={`${cell} border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40`}
+      >
+        ‹ Prev
+      </button>
+
+      {start > 1 && (
+        <>
+          <PageButton n={1} active={page === 1} onChange={onChange} />
+          {start > 2 && <span className="px-1 text-gray-400">…</span>}
+        </>
+      )}
+
+      {nums.map((n) => (
+        <PageButton key={n} n={n} active={n === page} onChange={onChange} />
+      ))}
+
+      {end < totalPages && (
+        <>
+          {end < totalPages - 1 && <span className="px-1 text-gray-400">…</span>}
+          <PageButton n={totalPages} active={page === totalPages} onChange={onChange} />
+        </>
+      )}
+
+      <button
+        type="button"
+        onClick={() => onChange(page + 1)}
+        disabled={page >= totalPages}
+        className={`${cell} border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40`}
+      >
+        Next ›
+      </button>
+    </div>
+  );
+}
+
+function PageButton({
+  n,
+  active,
+  onChange,
+}: {
+  n: number;
+  active: boolean;
+  onChange: (p: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(n)}
+      aria-current={active ? "page" : undefined}
+      className={
+        active
+          ? "min-w-[2rem] rounded-md border border-gray-900 bg-gray-900 px-2 py-1 text-sm font-medium text-white"
+          : "min-w-[2rem] rounded-md border border-gray-300 px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
+      }
+    >
+      {n}
+    </button>
   );
 }
 
