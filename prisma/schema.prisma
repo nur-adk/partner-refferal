@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Lead sourcing record for a prospective fractional CMO / senior marketing leader.
+model Lead {
+  id               String   @id @default(cuid())
+  name             String
+
+  // Apollo.io person id for tool-generated leads. Unique so re-running a
+  // search (or "similar to" expansion) skips people already in the DB.
+  apolloId         String?  @unique
+  title            String?
+  linkedinUrl      String?
+  email            String?
+  personalWebsite  String?
+  company          String?
+  companyWebsite   String?
+  summary          String?
+  university       String?
+  // Vertical the prospect operates in (e.g. "Luxury Hospitality"). Free-text so
+  // new industries don't need a schema change; the UI offers a curated picklist.
+  industry         String?
+
+  // Reviewer signals set from the leads UI.
+  // rating: "up" | "down" | null (thumbs). favorite: starred for the Favorites view.
+  rating           String?
+  favorite         Boolean  @default(false)
+  // True for leads from the most recent search run, so the UI can set them
+  // apart. Cleared when a newer search runs or the user marks them seen.
+  isNew            Boolean  @default(false)
+  // Comma-separated list of past employers. Not part of the CSV import spec yet,
+  // but required to power the warm-connection check against decision-maker profiles.
+  pastEmployers    String?
+
+  // "manual" (CSV upload) | "tool_generated" (future Apollo/API sourcing)
+  source           String   @default("manual")
+
+  // US-only for now. Kept as a plain string (not a DB enum, unsupported on SQLite)
+  // so CA/UK can be added as filter values later without a schema rebuild.
+  country          String   @default("US")
+
+  // "Similar To" stub — stores the pasted LinkedIn URL and a placeholder result
+  // until real similarity search (Apollo API) is wired up.
+  similarToLinkedinUrl String?
+  similarToResult       String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([country])
+  @@index([source])
+  @@index([industry])
+  @@index([favorite])
+}
+
+// Outreach team member profile, used for the warm-connection check against leads.
+model DecisionMaker {
+  id            String   @id @default(cuid())
+  name          String
+
+  // JSON array of { school, degree?, years? } — stored as text on SQLite.
+  education     String?
+
+  // JSON array of { company, title?, years? } — stored as text on SQLite.
+  pastEmployers String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

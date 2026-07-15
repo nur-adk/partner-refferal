@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma *)",
+      "Read(//Users/nuradhikarie/.nvm/versions/node/**)",
+      "Read(//opt/homebrew/opt/**)",
+      "Bash(command -v fnm volta)",
+      "Bash(find / -maxdepth 4 -iname \"node\" -type f)",
+      "Bash(mkdir -p /Users/nuradhikarie/Downloads/partnerrefferal/.claude)",
+      "Bash(lsof -i :3000 -sTCP:LISTEN)",
+      "Bash(ps -p 53697 -o pid,ppid,command)",
+      "Bash(awk -F= '/^APOLLO_API_KEY=/{print length\\($2\\)-2 \" chars \\(quotes included in count if present\\)\"}' /Users/nuradhikarie/Downloads/partnerrefferal/.env)",
+      "WebFetch(domain:docs.apollo.io)",
+      "WebSearch"
+    ]
+  }
+}
