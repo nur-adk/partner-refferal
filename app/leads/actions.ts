@@ -25,6 +25,11 @@ import { lookupEducation } from "@/lib/education";
 // costs an Apollo credit, so we bound it to avoid burning credits by accident.
 const MAX_ENRICH = 25;
 
+// Search is free, so we can scan a wide candidate pool to find people we don't
+// already have, and only spend credits enriching those.
+const SEARCH_PAGE_SIZE = 25; // candidates fetched per search page
+const SEARCH_PAGE_SCAN_LIMIT = 10; // max pages scanned per Generate click
+
 export async function updateLeadSummary(leadId: string, summary: string) {
   const trimmed = summary.trim();
 
@@ -259,8 +264,9 @@ export type GenerateResult = {
   enriched?: number; // how many we spent credits enriching
   created?: number; // new leads inserted
   duplicates?: number; // skipped because already in the DB
-  page?: number; // search page this run used
-  pageHadResults?: boolean; // false when the page returned nothing (end of results)
+  page?: number; // search page this run started from
+  nextPage?: number; // where the next Generate should resume
+  pageHadResults?: boolean; // false when the search returned nothing (end of results)
 };
 
 // Persist a batch of enriched Apollo people as tool-generated leads, skipping
@@ -359,26 +365,48 @@ export async function generateLeads(input: {
     // Only the latest run is "new" — clear the flag from any prior batch first.
     await prisma.lead.updateMany({ where: { isNew: true }, data: { isNew: false } });
 
-    const { people, totalEntries } = await searchPeople({
-      country: input.country,
-      titles,
-      keywords,
-      employeeRanges: input.companySizes,
-      page,
-      perPage: count,
-    });
+    // Search is free, so keep scanning pages until we've collected `count`
+    // people we don't already have. Without this, a page whose results are all
+    // duplicates would return zero new leads.
+    const fresh: { id: string }[] = [];
+    let cursor = page;
+    let pagesScanned = 0;
+    let totalEntries = 0;
+    let exhausted = false;
 
-    // Skip people already in the DB *before* enriching, so credits are only
-    // spent on genuinely new leads (enrichment is the paid Apollo call).
-    const existing = new Set(
-      (
-        await prisma.lead.findMany({
-          where: { apolloId: { in: people.map((p) => p.id) } },
-          select: { apolloId: true },
-        })
-      ).map((l) => l.apolloId),
-    );
-    const fresh = people.filter((p) => !existing.has(p.id)).slice(0, count);
+    while (fresh.length < count && pagesScanned < SEARCH_PAGE_SCAN_LIMIT) {
+      const { people, totalEntries: te } = await searchPeople({
+        country: input.country,
+        titles,
+        keywords,
+        employeeRanges: input.companySizes,
+        page: cursor,
+        perPage: SEARCH_PAGE_SIZE,
+      });
+      totalEntries = te || totalEntries;
+      pagesScanned += 1;
+      cursor += 1;
+
+      if (people.length === 0) {
+        exhausted = true; // no more results for these filters
+        break;
+      }
+
+      // Skip people already stored *before* enriching — enrichment is the paid
+      // call, so credits only go to genuinely new leads.
+      const known = new Set(
+        (
+          await prisma.lead.findMany({
+            where: { apolloId: { in: people.map((p) => p.id) } },
+            select: { apolloId: true },
+          })
+        ).map((l) => l.apolloId),
+      );
+      for (const p of people) {
+        if (fresh.length >= count) break;
+        if (!known.has(p.id) && !fresh.some((f) => f.id === p.id)) fresh.push(p);
+      }
+    }
 
     const enriched: ApolloLeadData[] = [];
     for (const person of fresh) {
@@ -398,7 +426,8 @@ export async function generateLeads(input: {
       created,
       duplicates,
       page,
-      pageHadResults: people.length > 0,
+      nextPage: cursor, // continue past the pages we just consumed
+      pageHadResults: !exhausted || fresh.length > 0,
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Search failed." };

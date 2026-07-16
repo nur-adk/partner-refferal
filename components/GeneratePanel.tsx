@@ -67,15 +67,13 @@ export default function GeneratePanel() {
         page,
       });
       if (r.ok) {
-        // Advance to the next page for the following click, so repeated Generates
-        // walk deeper into the results instead of re-fetching the same people.
-        if (r.pageHadResults) setPage((r.page ?? page) + 1);
-        const base = resultMessage(r, `Generate (page ${r.page ?? page})`);
-        const text = !r.pageHadResults
-          ? "No more results for these filters — adjust them to search again."
-          : r.created === 0
-            ? `${base}. All were already in your list — click Generate again for the next page.`
-            : base;
+        // Resume past the pages this run consumed, so repeated Generates keep
+        // pulling people we don't already have.
+        if (r.nextPage) setPage(r.nextPage);
+        const text =
+          r.created === 0 && !r.pageHadResults
+            ? "No more new people for these filters — widen them (role, industry, size, keyword) to keep going."
+            : resultMessage(r, "Generate");
         setStatus({ kind: "ok", text });
         router.refresh();
       } else {
