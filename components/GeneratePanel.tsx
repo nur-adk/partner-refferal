@@ -72,7 +72,9 @@ export default function GeneratePanel() {
         if (r.nextPage) setPage(r.nextPage);
         const text =
           r.created === 0 && !r.pageHadResults
-            ? "No more new people for these filters — widen them (role, industry, size, keyword) to keep going."
+            ? r.searchMatches === 0
+              ? "Apollo has nobody matching this combination — the filters are too narrow. Try removing the industry or picking a broader role."
+              : `No more new people here — you already have everyone Apollo lists for these filters (${(r.searchMatches ?? 0).toLocaleString()} total). Widen role, industry, size or keyword to keep going.`
             : resultMessage(r, "Generate");
         setStatus({ kind: "ok", text });
         router.refresh();

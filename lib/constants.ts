@@ -113,6 +113,56 @@ export const INDUSTRY_KEYWORDS: Record<string, string[]> = {
   "Professional Services": ["consulting", "agency", "advisory", "professional services"],
 };
 
+// Our industry labels are for display/tagging; passing them verbatim to Apollo's
+// keyword search is far too literal ("Luxury Hospitality" matches ~nobody, and
+// "SaaS / B2B Software" is meaningless as a phrase). Map each to the broadest
+// single term Apollo actually matches. Unmapped → no keyword (don't over-narrow).
+const INDUSTRY_SEARCH_KEYWORD: Record<string, string> = {
+  "Luxury Hospitality": "hospitality",
+  "Travel & Tourism": "travel",
+  "SaaS / B2B Software": "saas",
+  FinTech: "fintech",
+  "Financial Services": "financial services",
+  "Healthcare / HealthTech": "healthcare",
+  "Consumer Goods / CPG": "consumer goods",
+  "Beauty & Cosmetics": "beauty",
+  "Retail & eCommerce": "ecommerce",
+  "Fashion & Apparel": "fashion",
+  "Food & Beverage": "food",
+  "Real Estate / PropTech": "real estate",
+  "Media & Entertainment": "media",
+  "Education / EdTech": "education",
+  "Technology / Hardware": "hardware",
+  "Professional Services": "consulting",
+  "Manufacturing / Industrial": "manufacturing",
+  Automotive: "automotive",
+  "Sports & Fitness": "fitness",
+  "Energy / CleanTech": "energy",
+  Nonprofit: "nonprofit",
+  Legal: "legal",
+  Cannabis: "cannabis",
+  "Aerospace & Defense": "aerospace",
+  "Agriculture / AgTech": "agriculture",
+  "Construction & Built Environment": "construction",
+  "Gaming & Esports": "gaming",
+  "Insurance / InsurTech": "insurance",
+  "Logistics & Supply Chain": "logistics",
+  Telecommunications: "telecom",
+  "Government & Public Sector": "government",
+  "Pets & Pet Care": "pet",
+  "Home & Furniture": "furniture",
+  "Events & Experiential": "events",
+  Cybersecurity: "cybersecurity",
+  Other: "",
+};
+
+// The Apollo keyword to search for a given industry label ("" / null = none).
+export function apolloKeywordForIndustry(industry: string | null | undefined): string | null {
+  if (!industry) return null;
+  const mapped = INDUSTRY_SEARCH_KEYWORD[industry];
+  return mapped ? mapped : null;
+}
+
 // Company-size buckets → Apollo `organization_num_employees_ranges` ("min,max").
 export const COMPANY_SIZES = [
   { label: "Micro (1–9)", range: "1,9" },

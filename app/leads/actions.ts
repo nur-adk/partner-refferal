@@ -17,6 +17,7 @@ import {
   TITLE_CATEGORIES,
   guessIndustry,
   mapApolloIndustry,
+  apolloKeywordForIndustry,
   type LeadCountry,
 } from "@/lib/constants";
 import { lookupEducation } from "@/lib/education";
@@ -358,8 +359,12 @@ export async function generateLeads(input: {
     : [];
   const titles = picked.length ? [...new Set(picked.flatMap((c) => c.searchTitles))] : undefined;
 
-  // q_keywords is a single field, so combine the keyword box + industry.
-  const keywords = [input.keywords?.trim(), input.industry].filter(Boolean).join(" ") || undefined;
+  // q_keywords is a single field, so combine the keyword box + industry. The
+  // industry goes in as a searchable term (e.g. "hospitality"), never our
+  // display label ("Luxury Hospitality"), which Apollo matches too literally.
+  const keywords =
+    [input.keywords?.trim(), apolloKeywordForIndustry(input.industry)].filter(Boolean).join(" ") ||
+    undefined;
 
   try {
     // Only the latest run is "new" — clear the flag from any prior batch first.
